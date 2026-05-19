@@ -59,13 +59,16 @@ jobs:
           go-version: '1.24.0'
           cache-dependency-path: core/go.sum
 
-      - name: Setup Dart
+      - name: Setup Flutter
         if: steps.upstream.outputs.changed == 'true'
-        uses: dart-lang/setup-dart@v1
+        uses: subosito/flutter-action@v2
         with:
-          sdk: stable
+          channel: stable
+          flutter-version: 3.35.7
+          cache: true
 
       - name: Setup Android NDK
+        id: setup-ndk
         if: steps.upstream.outputs.changed == 'true'
         uses: nttld/setup-ndk@v1
         with:
@@ -75,10 +78,10 @@ jobs:
       - name: Build arm64 libclash
         if: steps.upstream.outputs.changed == 'true'
         env:
-          ANDROID_NDK: ${{ env.ANDROID_NDK_HOME }}
+          ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           set -euo pipefail
-          dart pub get
+          flutter pub get
           dart setup.dart android --arch arm64 --out core
           mkdir -p dist/lib/arm64-v8a
           cp libclash/android/arm64-v8a/libclash.so dist/libclash-android-arm64-v8a-smart-alpha.so
