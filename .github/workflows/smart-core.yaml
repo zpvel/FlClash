@@ -1,0 +1,103 @@
+name: smart-core
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Force rebuild even when upstream SHA is unchanged
+        required: false
+        default: 'false'
+  schedule:
+    - cron: '20 1 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check upstream
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+          smart_sha=$(git ls-remote https://github.com/vernesong/mihomo.git refs/heads/Alpha | awk '{print $1}')
+          smart_short=${smart_sha:0:8}
+          previous_sha=$(gh release view smart-alpha-core --json body -q '.body' 2>/dev/null | sed -nE 's/^Upstream-SHA: ([0-9a-f]+)$/\1/p' | head -n1 || true)
+          echo "smart_sha=$smart_sha" >> "$GITHUB_OUTPUT"
+          echo "smart_short=$smart_short" >> "$GITHUB_OUTPUT"
+          echo "previous_sha=$previous_sha" >> "$GITHUB_OUTPUT"
+          if [ "$FORCE" != "true" ] && [ -n "$previous_sha" ] && [ "$previous_sha" = "$smart_sha" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stop when unchanged
+        if: steps.upstream.outputs.changed == 'false'
+        run: echo "Smart Alpha is unchanged. Skip build."
+
+      - name: Point core to Smart Alpha
+        if: steps.upstream.outputs.changed == 'true'
+        run: |
+          git -C core/Clash.Meta remote add smart https://github.com/vernesong/mihomo.git || true
+          git -C core/Clash.Meta fetch smart Alpha --depth=1
+          git -C core/Clash.Meta checkout "${{ steps.upstream.outputs.smart_sha }}"
+
+      - name: Setup Go
+        if: steps.upstream.outputs.changed == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Dart
+        if: steps.upstream.outputs.changed == 'true'
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Setup Android NDK
+        if: steps.upstream.outputs.changed == 'true'
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28c
+          add-to-path: false
+
+      - name: Build arm64 libclash
+        if: steps.upstream.outputs.changed == 'true'
+        env:
+          ANDROID_NDK: ${{ env.ANDROID_NDK_HOME }}
+        run: |
+          set -euo pipefail
+          dart pub get
+          dart setup.dart android --arch arm64 --out core
+          mkdir -p dist/lib/arm64-v8a
+          cp libclash/android/arm64-v8a/libclash.so dist/libclash-android-arm64-v8a-smart-alpha.so
+          cp libclash/android/arm64-v8a/libclash.so dist/lib/arm64-v8a/libclash.so
+          cd dist
+          zip libclash-android-arm64-v8a-smart-alpha.zip lib/arm64-v8a/libclash.so
+          rm -rf lib
+          sha256sum libclash-android-arm64-v8a-smart-alpha.so > libclash-android-arm64-v8a-smart-alpha.so.sha256
+          sha256sum libclash-android-arm64-v8a-smart-alpha.zip > libclash-android-arm64-v8a-smart-alpha.zip.sha256
+
+      - name: Release
+        if: steps.upstream.outputs.changed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: smart-alpha-core
+          name: Smart Alpha Core ${{ steps.upstream.outputs.smart_short }}
+          prerelease: true
+          make_latest: false
+          body: |
+            FlClash dedicated Smart Alpha core.
+            Upstream-SHA: ${{ steps.upstream.outputs.smart_sha }}
+          files: dist/*
