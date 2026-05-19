@@ -53,7 +53,7 @@ jobs:
         if: steps.upstream.outputs.changed == 'true'
         run: |
           git -C core/Clash.Meta remote add smart https://github.com/vernesong/mihomo.git || true
-          git -C core/Clash.Meta fetch smart Alpha --depth=1
+          git -C core/Clash.Meta fetch smart Alpha
           git -C core/Clash.Meta checkout "${{ steps.upstream.outputs.build_sha }}"
 
       - name: Setup Go
