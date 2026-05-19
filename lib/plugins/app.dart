@@ -79,6 +79,24 @@ class App {
     });
   }
 
+  Future<Map<String, dynamic>> getCoreUpdateInfo() async {
+    final data = await methodChannel.invokeMapMethod<String, dynamic>(
+      'getCoreUpdateInfo',
+    );
+    return data ?? {};
+  }
+
+  Future<bool> installCoreOverride(String path) async {
+    return await methodChannel.invokeMethod<bool>('installCoreOverride', {
+          'path': path,
+        }) ??
+        false;
+  }
+
+  Future<bool> clearCoreOverride() async {
+    return await methodChannel.invokeMethod<bool>('clearCoreOverride') ?? false;
+  }
+
   Future<bool?> initShortcuts() async {
     return await methodChannel.invokeMethod<bool>(
       'initShortcuts',

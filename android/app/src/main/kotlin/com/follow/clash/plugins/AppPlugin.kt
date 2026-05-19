@@ -38,6 +38,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 import java.lang.ref.WeakReference
 import java.util.zip.ZipFile
 
@@ -157,9 +158,82 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
                 result.success(true)
             }
 
+            "getCoreUpdateInfo" -> {
+                result.success(getCoreUpdateInfo())
+            }
+
+            "installCoreOverride" -> {
+                scope.launch {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrBlank()) {
+                        result.success(false)
+                        return@launch
+                    }
+                    result.success(installCoreOverride(path))
+                }
+            }
+
+            "clearCoreOverride" -> {
+                scope.launch {
+                    result.success(clearCoreOverride())
+                }
+            }
+
             else -> {
                 result.notImplemented()
             }
+        }
+    }
+
+    private fun coreOverrideFile(): File {
+        return File(GlobalState.application.filesDir, "core_override/libclash.so")
+    }
+
+    private fun getCoreUpdateInfo(): Map<String, Any> {
+        val file = coreOverrideFile()
+        return mapOf(
+            "installed" to file.exists(),
+            "path" to file.absolutePath,
+            "size" to if (file.exists()) file.length() else 0L,
+            "lastModified" to if (file.exists()) file.lastModified() else 0L,
+        )
+    }
+
+    private suspend fun installCoreOverride(path: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            val source = File(path)
+            if (!source.exists() || source.length() <= 0) {
+                return@withContext false
+            }
+            FileInputStream(source).use {
+                val magic = ByteArray(4)
+                if (it.read(magic) != 4 ||
+                    magic[0] != 0x7f.toByte() ||
+                    magic[1] != 'E'.code.toByte() ||
+                    magic[2] != 'L'.code.toByte() ||
+                    magic[3] != 'F'.code.toByte()
+                ) {
+                    return@withContext false
+                }
+            }
+            val target = coreOverrideFile()
+            target.parentFile?.mkdirs()
+            val pending = File(target.parentFile, "libclash.so.pending")
+            source.copyTo(pending, overwrite = true)
+            pending.setReadable(true, false)
+            pending.setExecutable(true, false)
+            if (target.exists()) {
+                target.delete()
+            }
+            pending.renameTo(target)
+        }
+    }
+
+    private suspend fun clearCoreOverride(): Boolean {
+        return withContext(Dispatchers.IO) {
+            val file = coreOverrideFile()
+            if (!file.exists()) return@withContext true
+            file.delete()
         }
     }
 
