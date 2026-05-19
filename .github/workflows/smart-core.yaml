@@ -30,12 +30,16 @@ jobs:
         run: |
           set -euo pipefail
           smart_sha=$(git ls-remote https://github.com/vernesong/mihomo.git refs/heads/Alpha | awk '{print $1}')
+          build_sha="58949dd83a3e75647ab3be41a0f3aa9796071ce6"
           smart_short=${smart_sha:0:8}
-          previous_sha=$(gh release view smart-alpha-core --json body -q '.body' 2>/dev/null | sed -nE 's/^Upstream-SHA: ([0-9a-f]+)$/\1/p' | head -n1 || true)
+          build_short=${build_sha:0:8}
+          previous_sha=$(gh release view smart-alpha-core --json body -q '.body' 2>/dev/null | sed -nE 's/^Build-SHA: ([0-9a-f]+)$/\1/p' | head -n1 || true)
           echo "smart_sha=$smart_sha" >> "$GITHUB_OUTPUT"
+          echo "build_sha=$build_sha" >> "$GITHUB_OUTPUT"
           echo "smart_short=$smart_short" >> "$GITHUB_OUTPUT"
+          echo "build_short=$build_short" >> "$GITHUB_OUTPUT"
           echo "previous_sha=$previous_sha" >> "$GITHUB_OUTPUT"
-          if [ "$FORCE" != "true" ] && [ -n "$previous_sha" ] && [ "$previous_sha" = "$smart_sha" ]; then
+          if [ "$FORCE" != "true" ] && [ -n "$previous_sha" ] && [ "$previous_sha" = "$build_sha" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -50,7 +54,7 @@ jobs:
         run: |
           git -C core/Clash.Meta remote add smart https://github.com/vernesong/mihomo.git || true
           git -C core/Clash.Meta fetch smart Alpha --depth=1
-          git -C core/Clash.Meta checkout "${{ steps.upstream.outputs.smart_sha }}"
+          git -C core/Clash.Meta checkout "${{ steps.upstream.outputs.build_sha }}"
 
       - name: Setup Go
         if: steps.upstream.outputs.changed == 'true'
@@ -103,10 +107,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: smart-alpha-core
-          name: Smart Alpha Core ${{ steps.upstream.outputs.smart_short }}
+          name: Smart Alpha Core ${{ steps.upstream.outputs.build_short }}
           prerelease: true
           make_latest: false
           body: |
             FlClash dedicated Smart Alpha core.
             Upstream-SHA: ${{ steps.upstream.outputs.smart_sha }}
+            Build-SHA: ${{ steps.upstream.outputs.build_sha }}
           files: dist/*
