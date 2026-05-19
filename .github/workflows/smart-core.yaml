@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           smart_sha=$(git ls-remote https://github.com/vernesong/mihomo.git refs/heads/Alpha | awk '{print $1}')
-          build_sha="58949dd83a3e75647ab3be41a0f3aa9796071ce6"
+          build_sha="$smart_sha"
           smart_short=${smart_sha:0:8}
           build_short=${build_sha:0:8}
           previous_sha=$(gh release view smart-alpha-core --json body -q '.body' 2>/dev/null | sed -nE 's/^Build-SHA: ([0-9a-f]+)$/\1/p' | head -n1 || true)
